@@ -86,7 +86,7 @@ if (!$products) {
 
     echo "<table id='products'>";
 
-    foreach ($products as $prod) {
+    foreach ($products as $id => $prod) {
 
         echo "<form action='' method='post'>";
 
@@ -102,7 +102,7 @@ if (!$products) {
         echo "<td> " . $prod['category'] . "</td>";
         echo "<td> £" . $prod['unitprice'] . "</td>";
 
-        echo "<td><input type='hidden' name='itemid' value=".$prod['itemid']."> 
+        echo "<td><input type='hidden' name='itemid' value=".$id."> 
                    <input type='number' name='quantity' min='0' max='" .$prod['dailyquantity'] . "' value='0' />
                    <input type='submit' name='addprod' value='Add' /></td>";
 

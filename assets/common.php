@@ -93,7 +93,7 @@ function products_getter($conn){
     $stmt = $conn->prepare($sql); //prepares
     //$stmt->bindParam(1, $email);
     $stmt->execute(); //run the sql code
-    $result = $stmt->fetchAll(PDO::FETCH_ASSOC);  //brings back results
+    $result = $stmt->fetchAll(PDO::FETCH_UNIQUE | PDO::FETCH_ASSOC);  // ***** THIS LINE AND ITS FORMAT IS IMPORTANT ******
     return $result;
 }
 

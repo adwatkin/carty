@@ -10,31 +10,15 @@ if (!isset($_SESSION['userid'])) {  # If they have managed to get to this page w
     header("Location: login.php");  // redirects them
     exit;  // ensures no othetr code executes
 } elseif($_SERVER["REQUEST_METHOD"] === "POST") {  // if the user has posted
-    if(isset($_POST['appdelete'])){  // if they have clicked to delete the appointment
-        try{
-            if(cancel_appt(dbconnect_delete(), $_POST['apptid'])){  // try to cancel it
-                audtitor(dbconnect_insert(), $_SESSION['userid'], "APC", "Cancelled their appointment");  // audit the cancellation
-                $_SESSION['usermessage'] = "SUCCESS: Your Appointment was cancelled";  // Sets a user message
-                header('Location: bookings.php');  // redirects them
-                exit;  // ensures no other code executes
-            } else {
-                $_SESSION['usermessage'] = "ERROR: Could not able to execute complete this action";
-                header('Location: bookings.php');  // redirects them
-                exit;  // ensures no other code executes
-            }
-
-        } catch(PDOException $e) {
-            $_SESSION['message'] = "ERROR: ".$e->getMessage();
-            header('Location: bookings.php');  // redirects them
-            exit;  // ensures no other code executes
-        } catch (Exception $e){
-            $_SESSION['message'] = "ERROR: ".$e->getMessage();
-            header('Location: bookings.php');  // redirects them
-            exit;  // ensures no other code executes
-        }
-    } elseif (isset($_POST['appchange'])) {  // if the change appointment button was used
-        $_SESSION['apptid'] = $_POST['apptid'];  // capture the appointment id from the from
-        header('Location: alterbooking.php');  // send them to the alterbooking page
+    if(isset($_POST['delprod'])){  // if they have clicked to delete the appointment
+        unset($_SESSION['basket'][$_POST['itemid']]);
+        $_SESSION['usermessage'] = "SUCCESS: Product Removed.";
+        header('Location: basket.php');  // send them to the alterbooking page
+        exit;  // ensure no other code can execute
+    } elseif (isset($_POST['updateprod'])) {  // if the change appointment button was use
+        $_SESSION['basket'][$_POST['itemid']] = $_POST['quantity']; // capture the appointment id from the from
+        $_SESSION['usermessage'] = "SUCCESS: Quantity updated.";
+        header('Location: basket.php');  // send them to the alterbooking page
         exit;  // ensure no other code can execute
     }
 }
@@ -72,8 +56,10 @@ echo "<br>";
 
 echo "<p class='content'> Below are the Items in your basket </p>";
 
+
 try{
-    $products = basket_getter(dbconnect());
+    $products = products_getter(dbconnect());
+    $ordersubtotal = 0;
 } catch(PDOException $e){
     $_SESSION['message'] = "ERROR: ".$e->getMessage();
     header('Location: index.php');  // send them to the alterbooking page
@@ -84,47 +70,75 @@ try{
     exit;  // ensure no other code can execute
 }
 
-    echo "<table id='bookings'>";
+    echo "<table id='basket'>";
 
-    foreach ($appts as $appt) {
-        if ($appt['role'] = "doc") {
-            $role = "Doctor";
-        } elseif ($appt['role'] = "nur") {
-            $role = "Nurse";
-        }
+    echo "<thead>";
+        echo "<tr>";
+            echo "<th></th>";
+            echo "<th>Name</th>";
+            echo "<th>Category</th>";
+            echo "<th>Price</th>";
+            echo "<th>Sub</th>";
+            echo "<th>Actions</th>";
+        echo "</tr>";
+    echo "</thead>";
 
+    foreach ($_SESSION['basket'] as $itemid => $quantity) {
 
-        if($appt['status'] = "BKD") {
-            $status = "Booked";
-        } elseif($appt['status'] = "ATD") {
-            $status = "Attended";
-        } elseif($appt['status'] = "MSD") {
-            $status = "Missed";
-        } else {
-            $status = "Unknown";
-        }
-
-        echo "<form action='' method='post'>";
 
         echo "<tr>";
 
-        echo "<td> Date: " . date('M d, Y @ h:i A', $appt['appointmentdate']) . "</td>";
-        echo "<td> Made on: " . date('M d, Y @ h:i A', $appt['bookedon']) . "</td>";
-        echo "<td> With: " . $role . " " . $appt['fname'] . " " . $appt['sname'] . "</td>";
-        echo "<td> in Room: " . $appt['room'] . "</td>";
-        echo "<td> Status: " . $status . "</td>";
-        echo "<td><input type='hidden' name='apptid' value=".$appt['bookid']."> 
-                   <input type='submit' name='appdelete' value='Cancel Appt' />
-                   <input type='submit' name='appchange' value='Change Appt' /></td>";
+        if ($products[$itemid]['imglink']==""){
+            $imglnk = "default.png";
+        } else {
+            $imglnk = $products[$itemid]['imglink'];
+        }
 
-        echo "</tr>";
+        echo "<td> <img src='assets/prod_img/thumb_" . $imglnk . "'> </td>";
+        echo "<td> " . $products[$itemid]['name'] . "</td>";
+        echo "<td> " . $products[$itemid]['category'] . "</td>";
+        echo "<td> £" . $products[$itemid]['unitprice'] . "</td>";
+
+        echo "<td> ";
+            $itemsubtotal = $products[$itemid]['unitprice'] * $quantity;
+            $ordersubtotal += $itemsubtotal;
+            echo "£ " . $itemsubtotal;
+        echo "</td>";
+
+        echo "<td>";
+ echo "<form id='ind_item' action='' method='post'>
+        <input type='hidden' name='itemid' value='" . $itemid . "'> 
+                   <input type='number' name='quantity' min='0' max='" .$products[$itemid]['dailyquantity'] . "' value='" . $quantity . "'/>
+                   <input type='submit' name='delprod' value='Delete' />
+                   <input type='submit' name='updateprod' value='Update Quantity' />";
         echo "</form>";
+        echo "</td>";
+        echo "</tr>";
+
 
     }
-
-
     echo "</table>";
-}
+
+echo "<h2> Your Basket Total</h2>";
+
+echo "<table id='subtotal'>";
+    echo "<tr>";
+    echo "<td> Your Basket Subtotal: £" . $ordersubtotal . "</td>";
+echo "<td>";
+echo "<form id='ind_item' action='' method='post'>";
+echo "<select id='delorcol' name='delorcol' value=''>";
+    echo"<option value='collection'>Collection</option>";
+    echo"<option value='delivery'>Delivery</option>";
+echo "</select>";
+echo " Select delivery or collection date: ";
+echo "<input type='date' id='start' name='trip-start' min='2026-01-01' max='2026-12-31'>";
+echo "<input type='submit' name='clearorder' value='Delete Basket' />";
+echo "<input type='submit' name='comporder' value='Complete Order' />";
+echo "</form>";
+echo "</td>";
+    echo "</tr>";
+echo "</table>";
+
 echo "<br>";
 
 
