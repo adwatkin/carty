@@ -106,37 +106,69 @@ function in_basket($itemid){
 
 }
 
-function stock_check($conn, $itemid, $quant){
+function stock_check($conn, $datewanted){
 
-    // THIS IS MISSING THE DATE CHECK AS WELL.. AS IT HAS NOT BEEN ADDED
+    // 1. Get already sold totals for that date
+    // Note: Use backticks ` or no quotes for table names, not single quotes '
+    $sql = "SELECT b.itemid, SUM(b.quantity) as total_sold 
+            FROM custorder AS o 
+            JOIN basket AS b ON o.orderid = b.orderid 
+            WHERE o.datefor = ? 
+            GROUP BY b.itemid";
 
-    $sql = "SELECT quantity FROM basket WHERE itemid = ?"; //set up the sql statement
-    $stmt = $conn->prepare($sql); //prepares
-    $stmt->bindParam(1,$itemid);  //binds the parameters to execute
-    $stmt->execute(); //run the sql code
-    $result = $stmt->fetchAll(PDO::FETCH_ASSOC);  //brings back results
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$datewanted]);
+    // Use FETCH_KEY_PAIR to get [itemid => total_sold] for easy math
+    $alreadySold = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
-    $sql = "SELECT dailyquantity FROM item WHERE itemid = ?"; //set up the sql statement
-    $stmt = $conn->prepare($sql); //prepares
-    $stmt->bindParam(1,$itemid);  //binds the parameters to execute
-    $stmt->execute(); //run the sql code
-    $result1 = $stmt->fetch(PDO::FETCH_ASSOC);  //brings back results
-    $conn = null;  // nulls off the connection so cant be abused.
+    // 2. Get the master daily limits for items
+    $sql = "SELECT itemid, dailyquantity FROM item";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    $dailyLimits = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
-    if($result){  // if there is a result returned
-        $total = 0;
-        foreach($result as $row){
-            $total += $row["quantity"];
+    $unavailableItems = [];
+
+    // 3. Loop through the current user's basket
+    foreach ($_SESSION['basket'] as $itemid => $requestedQuant) {
+        #These lines use the Null Coalescing Operator (??), which is a shorthand way of
+        # saying: "Try to use this value, but if it doesn't exist, use this default instead."
+
+        $limit = $dailyLimits[$itemid] ?? 0;
+        $sold = $alreadySold[$itemid] ?? 0;
+
+        $remainingStock = $limit - $sold;
+
+        if ($requestedQuant > $remainingStock) {
+            // This item is short on stock! Store the ID (or name)
+            $unavailableItems[] = $itemid;
         }
-        if($total+$quant > $result1['dailyquantity']){
-            return false; // meaning you cant order that many
-        } else {
-            return true;  // meaning you can order that many
-        }
-    } elseif($result1['dailyquantity']>$quant) {
-        return true;  // no orders made for that date but enough stock
     }
-    else  {
-          return false;
+
+    // Return the list of items that failed the check
+    return $unavailableItems;
+
+}
+
+function new_order($conn,$datewanted, $userId, $delorcol){
+    $sql = "INSERT INTO custorder (datemade, datefor, userid, delORcol, orderstatus) VALUES (NOW(), ?, ?, ?, ?)";
+    $stmt = $conn->prepare($sql);
+
+// 2. Execute with your data
+    $stmt->execute([$datewanted, $userId, $delorcol, "Complete"]);
+
+// 3. Capture the newly generated OrderID
+    $newOrderId = $conn->lastInsertId();
+    $conn = null;
+    return $newOrderId;
+}
+
+function sell_basket($conn, $basket, $orderid){
+    $itemStmt = $conn->prepare("INSERT INTO basket (orderid, itemid, quantity) VALUES (?, ?, ?)");
+
+    foreach ($basket as $itemid => $quantity) {
+        $itemStmt->execute([$orderid, $itemid, $quantity]);
     }
+    $conn = null;
+    return true;
 }

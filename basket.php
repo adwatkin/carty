@@ -10,7 +10,7 @@ if (!isset($_SESSION['userid'])) {  # If they have managed to get to this page w
     header("Location: login.php");  // redirects them
     exit;  // ensures no othetr code executes
 } elseif($_SERVER["REQUEST_METHOD"] === "POST") {  // if the user has posted
-    if(isset($_POST['delprod'])){  // if they have clicked to delete the appointment
+    if (isset($_POST['delprod'])) {  // if they have clicked to delete the appointment
         unset($_SESSION['basket'][$_POST['itemid']]);
         $_SESSION['usermessage'] = "SUCCESS: Product Removed.";
         header('Location: basket.php');  // send them to the alterbooking page
@@ -20,8 +20,51 @@ if (!isset($_SESSION['userid'])) {  # If they have managed to get to this page w
         $_SESSION['usermessage'] = "SUCCESS: Quantity updated.";
         header('Location: basket.php');  // send them to the alterbooking page
         exit;  // ensure no other code can execute
+    } elseif (isset($_POST['clearorder'])) {  // if the change appointment button was use
+        $_SESSION['basket'] = []; // capture the appointment id from the from
+        $_SESSION['usermessage'] = "SUCCESS: Your basket has been cleared";
+        header('Location: products.php');  // send them to the alterbooking page
+        exit;  // ensure no other code can execute
+    } elseif (isset($_POST['comporder'])) {  // if the change appointment button was use
+        try {
+
+            #check stock of all items, for date wanted,
+            #if not in stock wanted, return to basket with message
+            $failedItems = stock_check(dbconnect(), $_POST['datewanted']);
+            if (empty($failedItems)) {
+                $orderid = new_order(dbconnect(),$_POST['datewanted'], $_SESSION['userid'], $_POST['delorcol']);
+                if(sell_basket(dbconnect(), $_SESSION['basket'], $orderid)) {
+                    $_SESSION['basket'] = []; // capture the appointment id from the from
+                    $_SESSION['usermessage'] = "SUCCESS: Your Order has been completed";
+                    header('Location: index.php');  // send them to the alterbooking page
+                    exit;  // ensure no other code can execute
+                } else {
+                    $_SESSION['usermessage'] = "ERROR: Your order did not complete!";
+                    header('Location: basket.php');  // send them to the alterbooking page
+                    exit;  // ensure no other code can execute
+                }
+
+            } else {
+                $_SESSION['usermessage'] = "ERROR: Sorry, the following items are sold out: " . implode(', ', $failedItems);
+                header('Location: basket.php');  // send them to the alterbooking page
+                exit;  // ensure no other code can execute
+            }
+
+        } catch (PDOException $e) {
+            $_SESSION['usermessage'] = "Error: " . $e->getMessage();
+            header('Location: basket.php');  // send them to the alterbooking page
+            exit;  // ensure no other code can execute
+        } catch (exception $e) {
+            $_SESSION['usermessage'] = "Error: " . $e->getMessage();
+            header('Location: basket.php');  // send them to the alterbooking page
+            exit;  // ensure no other code can execute
+        }
+
     }
+
 }
+
+
 
 echo "<!DOCTYPE html>";  # essential html line to dictate the page type
 
@@ -126,15 +169,22 @@ echo "<table id='subtotal'>";
     echo "<td> Your Basket Subtotal: £" . $ordersubtotal . "</td>";
 echo "<td>";
 echo "<form id='ind_item' action='' method='post'>";
+
 echo "<select id='delorcol' name='delorcol' value=''>";
     echo"<option value='collection'>Collection</option>";
     echo"<option value='delivery'>Delivery</option>";
 echo "</select>";
+
 echo " Select delivery or collection date: ";
-echo "<input type='date' id='start' name='trip-start' min='2026-01-01' max='2026-12-31'>";
+
+echo "<input type='date' id='start' name='datewanted' min='2026-01-01' max='2026-12-31'>";
+
 echo "<input type='submit' name='clearorder' value='Delete Basket' />";
+
 echo "<input type='submit' name='comporder' value='Complete Order' />";
+
 echo "</form>";
+
 echo "</td>";
     echo "</tr>";
 echo "</table>";
